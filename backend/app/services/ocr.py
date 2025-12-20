@@ -131,6 +131,30 @@ class _OcrItem:
     text: str
     bbox: tuple[float, float, float, float]
 
+    @property
+    def x1(self) -> float:
+        return self.bbox[0]
+
+    @property
+    def y1(self) -> float:
+        return self.bbox[1]
+
+    @property
+    def x2(self) -> float:
+        return self.bbox[2]
+
+    @property
+    def y2(self) -> float:
+        return self.bbox[3]
+
+    @property
+    def h(self) -> float:
+        return max(0.0, self.y2 - self.y1)
+
+    @property
+    def y_mid(self) -> float:
+        return (self.y1 + self.y2) / 2.0
+
 
 def _median(values: list[float], default: float) -> float:
     if not values:
@@ -139,43 +163,113 @@ def _median(values: list[float], default: float) -> float:
     return values[len(values) // 2]
 
 
+def _y_overlap_ratio(a: tuple[float, float], b: tuple[float, float]) -> float:
+    """Return overlap / min(height_a, height_b) for vertical intervals."""
+    ay1, ay2 = a
+    by1, by2 = b
+    inter = max(0.0, min(ay2, by2) - max(ay1, by1))
+    ha = max(0.0, ay2 - ay1)
+    hb = max(0.0, by2 - by1)
+    denom = min(ha, hb)
+    return (inter / denom) if denom > 0 else 0.0
+
+
+@dataclass
+class _RowCluster:
+    items: list[_OcrItem]
+    y1: float
+    y2: float
+    x1: float
+    x2: float
+
+    @property
+    def y_mid(self) -> float:
+        return (self.y1 + self.y2) / 2.0
+
+    def add(self, it: _OcrItem) -> None:
+        self.items.append(it)
+        self.y1 = min(self.y1, it.y1)
+        self.y2 = max(self.y2, it.y2)
+        self.x1 = min(self.x1, it.x1)
+        self.x2 = max(self.x2, it.x2)
+
+
 def _group_lines_into_rows(
     items: list[_OcrItem],
     *,
-    y_tol_factor: float = 0.60,
-    min_y_tol: float = 8.0,
+    # Require some real vertical overlap to avoid mixing adjacent rows.
+    min_y_overlap_ratio: float = 0.35,
+    # Also allow join when y-mids are close (helps when overlap is small due to tight bboxes).
+    y_mid_tol_factor: float = 0.45,
+    # If a page is multi-column, a large x gap within the same y band is often a column break.
+    column_x_gap_factor: float = 2.5,
 ) -> list[str]:
-    """Group OCR line items into visual rows using bbox geometry.
+    """Group OCR items into visual rows using overlap-based clustering.
 
-    Strategy:
-    - Compute typical line height (median).
-    - Bucket by Y (using y-mid / tolerance band).
-    - Within each bucket, sort by X and concatenate texts.
+    This is more robust than simple Y-banding because it:
+    - avoids merging adjacent rows when line spacing is tight
+    - handles slight y offsets between left text and right prices
+    - can split multi-column content heuristically by detecting large x gaps
     """
 
     if not items:
         return []
 
-    heights = [(it.bbox[3] - it.bbox[1]) for it in items if (it.bbox[3] - it.bbox[1]) > 0]
+    heights = [it.h for it in items if it.h > 0]
     median_h = _median(heights, default=20.0)
-    row_tol = max(min_y_tol, median_h * y_tol_factor)
+    y_mid_tol = max(6.0, median_h * y_mid_tol_factor)
 
-    # Bucket items by y-band, then order bands top->bottom.
-    buckets: dict[int, list[_OcrItem]] = {}
-    for it in items:
-        x1, y1, x2, y2 = it.bbox
-        y_mid = (y1 + y2) / 2.0
-        key = int(y_mid // row_tol)
-        buckets.setdefault(key, []).append(it)
+    # 1) Sort by y, then x.
+    ordered = sorted(items, key=lambda it: (it.y_mid, it.x1))
+
+    # 2) Assign each item to the best matching existing cluster.
+    clusters: list[_RowCluster] = []
+    for it in ordered:
+        best_idx: Optional[int] = None
+        best_score = -1.0
+        for idx, c in enumerate(clusters):
+            overlap = _y_overlap_ratio((it.y1, it.y2), (c.y1, c.y2))
+            ymid_close = abs(it.y_mid - c.y_mid) <= y_mid_tol
+            if overlap >= min_y_overlap_ratio or ymid_close:
+                # Prefer strong overlap; tie-breaker uses y-mid distance.
+                score = overlap - (abs(it.y_mid - c.y_mid) / max(1.0, y_mid_tol)) * 0.10
+                if score > best_score:
+                    best_score = score
+                    best_idx = idx
+
+        if best_idx is None:
+            clusters.append(_RowCluster(items=[it], y1=it.y1, y2=it.y2, x1=it.x1, x2=it.x2))
+        else:
+            clusters[best_idx].add(it)
+
+    # 3) Sort clusters top-to-bottom and normalize each row.
+    clusters.sort(key=lambda c: c.y_mid)
 
     out_rows: list[str] = []
-    for band in sorted(buckets.keys()):
-        row_items = buckets[band]
-        row_items.sort(key=lambda it: it.bbox[0])  # left-to-right
+    for c in clusters:
+        c.items.sort(key=lambda it: it.x1)
 
-        # Join with single spaces; preserve prices as separate tokens.
-        row_text = " ".join(it.text for it in row_items if it.text)
-        row_text = _clean_ocr_line(row_text)
+        # Heuristic: if there is a huge x gap inside the row, treat it as a column break.
+        # Keep both parts on the same output line, but ensure stable spacing.
+        xs = [it.x1 for it in c.items]
+        if xs:
+            x_steps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+            med_step = _median([s for s in x_steps if s > 0], default=0.0)
+            gap_thresh = max(40.0, med_step * column_x_gap_factor) if med_step > 0 else 120.0
+        else:
+            gap_thresh = 120.0
+
+        parts: list[str] = []
+        last_x: Optional[float] = None
+        for it in c.items:
+            if not it.text:
+                continue
+            if last_x is not None and (it.x1 - last_x) > gap_thresh:
+                parts.append(" | ")  # visual separator between columns
+            parts.append(it.text)
+            last_x = it.x1
+
+        row_text = _clean_ocr_line(" ".join(parts).replace(" | ", " | "))
         if row_text:
             out_rows.append(row_text)
 
