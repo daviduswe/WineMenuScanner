@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import re
+from dataclasses import dataclass
 from typing import Any, Optional
 
 from PIL import Image
@@ -125,8 +126,68 @@ def _clean_ocr_line(s: str) -> str:
     return s.strip()
 
 
+@dataclass
+class _OcrItem:
+    text: str
+    bbox: tuple[float, float, float, float]
+
+
+def _median(values: list[float], default: float) -> float:
+    if not values:
+        return default
+    values = sorted(values)
+    return values[len(values) // 2]
+
+
+def _group_lines_into_rows(
+    items: list[_OcrItem],
+    *,
+    y_tol_factor: float = 0.60,
+    min_y_tol: float = 8.0,
+) -> list[str]:
+    """Group OCR line items into visual rows using bbox geometry.
+
+    Strategy:
+    - Compute typical line height (median).
+    - Bucket by Y (using y-mid / tolerance band).
+    - Within each bucket, sort by X and concatenate texts.
+    """
+
+    if not items:
+        return []
+
+    heights = [(it.bbox[3] - it.bbox[1]) for it in items if (it.bbox[3] - it.bbox[1]) > 0]
+    median_h = _median(heights, default=20.0)
+    row_tol = max(min_y_tol, median_h * y_tol_factor)
+
+    # Bucket items by y-band, then order bands top->bottom.
+    buckets: dict[int, list[_OcrItem]] = {}
+    for it in items:
+        x1, y1, x2, y2 = it.bbox
+        y_mid = (y1 + y2) / 2.0
+        key = int(y_mid // row_tol)
+        buckets.setdefault(key, []).append(it)
+
+    out_rows: list[str] = []
+    for band in sorted(buckets.keys()):
+        row_items = buckets[band]
+        row_items.sort(key=lambda it: it.bbox[0])  # left-to-right
+
+        # Join with single spaces; preserve prices as separate tokens.
+        row_text = " ".join(it.text for it in row_items if it.text)
+        row_text = _clean_ocr_line(row_text)
+        if row_text:
+            out_rows.append(row_text)
+
+    return out_rows
+
+
 def _extract_text_lines(pred: Any) -> list[str]:
-    """Extract line texts from Surya prediction in a stable reading order."""
+    """Extract line texts from Surya prediction.
+
+    If bbox is present, merge same-row items using geometry so output becomes
+    more human-like for menus (wine text + prices on the same row).
+    """
 
     mapping, obj = _as_mapping_or_object(pred)
 
@@ -137,6 +198,7 @@ def _extract_text_lines(pred: Any) -> list[str]:
         text_lines = getattr(obj, "text_lines", None)
 
     collected: list[tuple[str, Optional[tuple[float, float, float, float]]]] = []
+    items: list[_OcrItem] = []
     if text_lines:
         for tl in text_lines:
             tl_map, tl_obj = _as_mapping_or_object(tl)
@@ -152,6 +214,12 @@ def _extract_text_lines(pred: Any) -> list[str]:
             cleaned = _clean_ocr_line(str(text))
             if cleaned:
                 collected.append((cleaned, bbox))
+                if bbox is not None:
+                    items.append(_OcrItem(text=cleaned, bbox=bbox))
+
+    # Prefer geometry-based row grouping when we have any bboxes.
+    if items:
+        return _group_lines_into_rows(items)
 
     # Sort to match image reading order as closely as possible.
     return [ln for ln in _reading_order_sort(collected) if ln]
