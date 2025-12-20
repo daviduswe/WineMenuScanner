@@ -72,6 +72,15 @@ export default function App() {
       const res = await analyzeMenu(file)
       setRawText(res.rawText)
       setWines(res.wines)
+
+      // If OCR ran but no wines parsed, surface a helpful message.
+      if ((res.wines?.length ?? 0) === 0) {
+        if (!res.rawText || res.rawText.trim().length === 0) {
+          setError('OCR returned no text. Try a higher-resolution, well-lit photo, then re-upload.')
+        } else {
+          setError('OCR succeeded but no wine rows were detected. See “OCR raw text” below for troubleshooting.')
+        }
+      }
     } catch (e: any) {
       setError(e?.message ?? 'Unknown error')
     } finally {
@@ -124,7 +133,7 @@ export default function App() {
 
         {error ? <div className="alert alert-error">{error}</div> : null}
 
-        {wines.length === 0 && !loading && !error ? (
+        {wines.length === 0 && !loading && !error && !rawText ? (
           <div className="hint">Upload a wine menu image to see results.</div>
         ) : null}
 
@@ -142,9 +151,9 @@ export default function App() {
           />
         ) : null}
 
-        {/* Raw text is useful during MVP; can be hidden later */}
-        {rawText && wines.length > 0 ? (
-          <details className="raw">
+        {/* Always show raw text if present (even when no wines parsed) */}
+        {rawText ? (
+          <details className="raw" open={wines.length === 0}>
             <summary>OCR raw text</summary>
             <pre>{rawText}</pre>
           </details>

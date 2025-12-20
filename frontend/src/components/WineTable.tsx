@@ -18,6 +18,16 @@ function fmtPrice(value?: number | null, currency?: string | null) {
   return `${cur}${value}`
 }
 
+function isNoiseRow(w: Wine) {
+  const name = (w.name ?? '').trim()
+  // Common OCR noise glyphs: dot/bullets, underscores, hyphens, and related unicode dashes.
+  const onlyNoiseGlyphs = name.length > 0 && /^[\s._\-\u00b7\u2219\u2022\u2043\u2212\u2010\u2011\u2012\u2013\u2014\u2015\u208b\u2099\u20bf\u208b\u208d\u208e\u208a\u208c\u208f\u2080\u2081\u2082\u2083\u2084\u2085\u2086\u2087\u2088\u2089]+$/.test(name)
+  const glass = w.price?.glass
+  const bottle = w.price?.bottle
+  const noPrices = glass == null && bottle == null
+  return onlyNoiseGlyphs && noPrices
+}
+
 export default function WineTable({
   wines,
   sections,
@@ -29,6 +39,8 @@ export default function WineTable({
   onSortKeyChange,
   onSelect,
 }: Props) {
+  const visibleWines = wines.filter((w) => !isNoiseRow(w))
+
   return (
     <section className="card">
       <div className="card-row">
@@ -70,7 +82,7 @@ export default function WineTable({
             </tr>
           </thead>
           <tbody>
-            {wines.map((w) => (
+            {visibleWines.map((w) => (
               <tr key={w.id} className="row" onClick={() => onSelect(w.id)}>
                 <td>{w.wineGroup ?? '—'}</td>
                 <td>{w.name ?? '—'}</td>
@@ -82,7 +94,7 @@ export default function WineTable({
         </table>
       </div>
 
-      {wines.length === 0 ? <div className="hint">No wines found for your filters.</div> : null}
+      {visibleWines.length === 0 ? <div className="hint">No wines found for your filters.</div> : null}
     </section>
   )
 }

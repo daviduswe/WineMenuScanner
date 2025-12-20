@@ -144,7 +144,7 @@ def parse_wines_from_text(raw_text: str) -> list[Wine]:
         return False
 
     lines = [ln.strip() for ln in (raw_text or "").splitlines()]
-    for ln in lines:
+    for idx, ln in enumerate(lines):
         if not ln:
             continue
 
@@ -161,19 +161,37 @@ def parse_wines_from_text(raw_text: str) -> list[Wine]:
                 is_pure_price_line = True
 
         # If we have a pure price line but *no* pending wine name, drop it.
-        # This commonly happens when OCR reads the menu in columns/out-of-order and
-        # separates the price column from the wine-name column.
         if pending_wine is None and is_pure_price_line:
             continue
 
         if pending_wine is not None and is_pure_price_line:
             # Assign in order: glass first, then bottle.
-            # Special case: if the line is a single numeric value and we already consumed
-            # a glass slot with an explicit N/A earlier, treat this as bottle.
+            # Heuristic improvement:
+            # - If we have no glass/bottle yet and this line is a single numeric value,
+            #   peek at the next line. If the next line is also a single numeric value,
+            #   treat current as glass and next as bottle (common "14" then "48").
 
-            # Determine if this line contains at least one numeric price token
             numeric_in_line = any(v is not None for v in prices)
             only_one_col = len(prices) == 1
+
+            next_ln = lines[idx + 1].strip() if idx + 1 < len(lines) else ""
+            next_currency, next_prices = _extract_price_tokens(next_ln) if next_ln else (None, [])
+            next_is_pure_price_line = False
+            if next_prices:
+                tmp2 = next_ln
+                tmp2 = NA_RE.sub(" ", tmp2)
+                tmp2 = PRICE_RE.sub(" ", tmp2)
+                tmp2 = VINTAGE_RE.sub(" ", tmp2)
+                if tmp2.strip(" \t|:.-") == "":
+                    next_is_pure_price_line = True
+
+            if pending_price_slots_filled == 0 and numeric_in_line and only_one_col and next_is_pure_price_line:
+                # Most menus list glass then bottle; keep that assumption.
+                pending_wine.price.glass = prices[0]
+                pending_price_slots_filled = 1
+                if currency and not pending_wine.price.currency:
+                    pending_wine.price.currency = currency
+                continue
 
             for val in prices:
                 if pending_price_slots_filled == 0:
@@ -199,10 +217,6 @@ def parse_wines_from_text(raw_text: str) -> list[Wine]:
             if currency and not pending_wine.price.currency:
                 pending_wine.price.currency = currency
 
-            # Flush rules:
-            # - flush immediately if we now have both columns, OR
-            # - flush immediately if we just filled bottle, OR
-            # - flush if this line had 2 columns.
             if pending_price_slots_filled >= 2:
                 wines.append(pending_wine)
                 pending_wine = None
