@@ -1,0 +1,13 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.4
+python-multipart==0.0.20
+pillow==11.0.0
+setuptools>=70.0.0
+
+# OCR (PaddleOCR)
+# PaddleOCR currently requires numpy < 2.0
+numpy==1.26.4
+paddleocr==2.9.1
+# Python 3.13 wheels are available for PaddlePaddle 3.x
+paddlepaddle==3.2.2
