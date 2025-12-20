@@ -115,12 +115,25 @@ _TAG_RE = re.compile(r"</?\w+[^>]*>")
 # Collapse runs of dash-like characters often used as separators.
 _DASH_RUN_RE = re.compile(r"[\-\u2013\u2014\u2212_]{3,}")
 
+# Remove trailing separator glyphs (often used to visually connect name to price).
+# Includes ASCII hyphen/underscore, en/em-dash, minus sign, and OCR artifacts like subscript minus (₋).
+_TRAILING_SEP_RE = re.compile(r"\s*[\-\u2010\u2011\u2012\u2013\u2014\u2015\u2212_\u208b\u00b7\u2219\u2022\u2043]+\s*$")
+
+# Remove separator glyphs that get glued to the start of a price token (common in menus).
+# Examples: "Italy ₋n/a 62", "Italy .n/a 82", "Italy ·n/a 140", "Italy - n/a 165"
+_SEP_BEFORE_PRICE_RE = re.compile(
+    r"\s*[\-\u2010\u2011\u2012\u2013\u2014\u2015\u2212_\u208b\u00b7\u2219\u2022\u2043\.]+\s*(?=(?:n\s*/\s*a|\d{1,4})(?:\b|\s))",
+    re.IGNORECASE,
+)
+
 
 def _clean_ocr_line(s: str) -> str:
     s = _TAG_RE.sub("", s)
     s = _DASH_RUN_RE.sub(" ", s)
-    # Remove trailing separator dashes (single or short runs) at line end.
-    s = re.sub(r"\s*[\-\u2013\u2014\u2212_]+\s*$", "", s)
+    # Remove separator glyphs that appear right before a price token.
+    s = _SEP_BEFORE_PRICE_RE.sub(" ", s)
+    # Remove trailing separator dashes/dots at line end (including long runs and unicode variants).
+    s = _TRAILING_SEP_RE.sub("", s)
     # Normalize whitespace
     s = " ".join(s.split())
     return s.strip()
