@@ -5,10 +5,10 @@ type Props = {
   sections: string[]
   query: string
   section: string
-  sortKey: 'name' | 'vintage' | 'price'
+  sortKey: 'name' | 'price' | 'glassPrice' | 'group'
   onQueryChange: (v: string) => void
   onSectionChange: (v: string) => void
-  onSortKeyChange: (v: 'name' | 'vintage' | 'price') => void
+  onSortKeyChange: (v: 'name' | 'price' | 'glassPrice' | 'group') => void
   onSelect: (id: string) => void
 }
 
@@ -65,8 +65,9 @@ export default function WineTable({
           </select>
           <select className="select" value={sortKey} onChange={(e) => onSortKeyChange(e.currentTarget.value as any)}>
             <option value="name">Sort: Name</option>
-            <option value="vintage">Sort: Vintage</option>
             <option value="price">Sort: Bottle Price</option>
+            <option value="glassPrice">Sort: Glass Price</option>
+            <option value="group">Sort: Group</option>
           </select>
         </div>
       </div>

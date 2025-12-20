@@ -16,7 +16,7 @@ export default function App() {
   // List state
   const [query, setQuery] = useState('')
   const [section, setSection] = useState<string>('')
-  const [sortKey, setSortKey] = useState<'name' | 'vintage' | 'price'>('name')
+  const [sortKey, setSortKey] = useState<'name' | 'price' | 'glassPrice' | 'group'>('group')
 
   const selectedWine = useMemo(
     () => wines.find((w) => w.id === selectedId) ?? null,
@@ -47,9 +47,24 @@ export default function App() {
       out = out.filter((w) => (w.wineGroup ?? w.section ?? '') === section)
     }
 
+    // Default sort output by vintage (desc), then by name (asc).
+    // Additional sort modes are available via the UI dropdown.
     out = [...out].sort((a, b) => {
+      const vintageCmp = (b.vintage ?? 0) - (a.vintage ?? 0)
+      if (vintageCmp !== 0) return vintageCmp
+
       if (sortKey === 'name') return (a.name ?? '').localeCompare(b.name ?? '')
-      if (sortKey === 'vintage') return (b.vintage ?? 0) - (a.vintage ?? 0)
+
+      if (sortKey === 'group') return (a.wineGroup ?? a.section ?? '').localeCompare(b.wineGroup ?? b.section ?? '')
+
+      if (sortKey === 'glassPrice') {
+        const aPrice = a.price?.glass
+        const bPrice = b.price?.glass
+        if (aPrice == null && bPrice == null) return 0
+        if (aPrice == null) return 1
+        if (bPrice == null) return -1
+        return aPrice - bPrice
+      }
 
       // sort by bottle price primarily; fall back to glass; N/A last
       const aPrice = a.price?.bottle ?? a.price?.glass
@@ -94,7 +109,7 @@ export default function App() {
     setSelectedId(null)
     setQuery('')
     setSection('')
-    setSortKey('name')
+    setSortKey('group')
     setError(null)
   }
 
