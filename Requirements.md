@@ -148,27 +148,26 @@ At a High Level, the System Will:
 
 ```mermaid
 flowchart TD
-    A[User opens web app] --> B[Upload 1 menu image]
-    B --> C[Backend: Receive image]
-    C --> D[OCR: Extract text]
-    D --> E["Parse structure: sections + wine rows"]
-    E --> F[Light normalization]
+    A[User opens web app] --> B[Upload 1 menu image];
+    B --> C[Backend receives image];
+    C --> D[OCR extracts text];
+    D --> E[Parse structure: sections and wine rows];
+    E --> F[Light normalization];
+    F --> G[Return structured wine list JSON];
+    G --> H[UI shows wine list];
 
-    F --> G["Return structured wine list (JSON)"]
-    G --> H["UI: Show wine list (search + filter + sort)"]
-
-    H --> I[User clicks a wine row]
-    I --> J[UI: Show wine details]
-    J --> H[Back to list]
+    H --> I[User clicks a wine row];
+    I --> J[UI shows wine details];
+    J --> H;
 
     %% Optional enrichment (best-effort)
-    F -. optional .-> K[Gemini enrichment]
-    K -. update .-> J
-    K -. update .-> H
+    F -.-> K[Gemini enrichment];
+    K -.-> J;
+    K -.-> H;
 
-    %% Error/empty handling
-    D -->|OCR failed| X["Show error + allow re-upload"]
-    E -->|No wines found| Y["Show empty state + allow re-upload"]
+    %% Error handling
+    D -->|OCR failed| X[Show error and re-upload];
+    E -->|No wines found| Y[Show empty state and re-upload];
 ```
 
 The flow is intentionally minimal: show the list as soon as extraction completes; enrichment (if enabled) can update the list/detail afterward without blocking initial results.
