@@ -22,4 +22,12 @@ PIP="./.venv/bin/pip"
 "$PY" -m pip install --upgrade pip
 "$PIP" install -r requirements.txt
 
-exec "$PY" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+# Uvicorn reload spawns a reloader process and can trigger multiprocessing
+# semaphore leak warnings with ML/OCR stacks (PyTorch/Surya) on shutdown.
+# Keep reload OFF by default; enable explicitly with BACKEND_RELOAD=1.
+UVICORN_RELOAD=()
+if [[ "${BACKEND_RELOAD:-}" =~ ^(1|true|yes|on)$ ]]; then
+  UVICORN_RELOAD+=(--reload)
+fi
+
+exec "$PY" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 "${UVICORN_RELOAD[@]}"
