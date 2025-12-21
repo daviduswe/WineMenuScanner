@@ -7,7 +7,7 @@ export default function UploadCard({ loading, onUpload }: Props) {
   return (
     <section className="card">
       <div className="card-title">Upload Wine Menu</div>
-      <div className="card-subtitle">Upload 1 image (.jpg/.png). We will extract a wine list.</div>
+      <div className="card-subtitle">Upload an image to extract a wine list.</div>
 
       <label className="upload">
         <input

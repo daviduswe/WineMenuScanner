@@ -18,6 +18,8 @@ export default function WineDetail({ wine }: Props) {
       <div className="detail-title">{wine.name ?? 'Unknown Wine'}</div>
       <div className="detail-sub">{group ?? 'Ungrouped'}</div>
 
+      {wine.description ? <div className="hint" style={{ marginTop: 8 }}>{wine.description}</div> : null}
+
       <div className="grid">
         <div className="kv">
           <div className="k">Wine group</div>

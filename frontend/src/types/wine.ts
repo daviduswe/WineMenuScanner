@@ -17,6 +17,8 @@ export type Wine = {
   vintage?: number | null
   grape?: string | null
 
+  description?: string | null
+
   price?: Price
 }
 

@@ -86,7 +86,10 @@ export default function WineTable({
             {visibleWines.map((w) => (
               <tr key={w.id} className="row" onClick={() => onSelect(w.id)}>
                 <td>{w.wineGroup ?? '—'}</td>
-                <td>{w.name ?? '—'}</td>
+                <td>
+                  <div>{w.name ?? '—'}</div>
+                  {w.description ? <div className="muted small">{w.description}</div> : null}
+                </td>
                 <td className="right">{fmtPrice(w.price?.glass, w.price?.currency)}</td>
                 <td className="right">{fmtPrice(w.price?.bottle, w.price?.currency)}</td>
               </tr>

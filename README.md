@@ -148,27 +148,23 @@ At a High Level, the System Will:
 
 ```mermaid
 flowchart TD
-    A[User opens web app] --> B[Upload 1 menu image]
-    B --> C[Backend: Receive image]
-    C --> D[OCR: Extract text]
-    D --> E[Parse structure: sections + wine rows]
-    E --> F[Light normalization]
+    A[Open web app] --> B[Upload menu image]
+    B --> C[Backend receives image]
+    C --> D[Run OCR]
+    D --> E[Parse and normalize]
 
-    F --> G[Return structured wine list (JSON)]
-    G --> H[UI: Show wine list (search + filter + sort)]
+    E --> L[Optional LLM enrichment]
+    L --> F[Return wines as JSON]
 
-    H --> I[User clicks a wine row]
-    I --> J[UI: Show wine details]
-    J --> H[Back to list]
+    E --> F
 
-    %% Optional enrichment (best-effort)
-    F -. optional .-> K[Gemini enrichment]
-    K -. update .-> J
-    K -. update .-> H
+    F --> G[UI shows list]
+    G --> H[Click row]
+    H --> I[UI shows details]
+    I --> G
 
-    %% Error/empty handling
-    D -->|OCR failed| X[Show error + allow re-upload]
-    E -->|No wines found| Y[Show empty state + allow re-upload]
+    D -->|OCR failed| X[Show error]
+    E -->|No wines found| Y[Show empty state]
 ```
 
 The flow is intentionally minimal: show the list as soon as extraction completes; enrichment (if enabled) can update the list/detail afterward without blocking initial results.
@@ -269,3 +265,17 @@ This stack is intentionally small and fast for the MVP.
 - Backend: `./start-backend.sh`
 - Frontend: `./start-frontend.sh`
 - Both: `./start-all.sh`
+
+## Optional: Gemini enrichment
+
+You can optionally enrich missing fields (producer, region, grape, vintage) using Gemini.
+
+1) Create `backend/.env` from the template:
+- Copy `backend/.env.example` to `backend/.env`
+
+2) Set:
+- `ENABLE_GEMINI_ENRICHMENT=true`
+- `GEMINI_API_KEY=...`
+- (optional) `GEMINI_MODEL=gemini-1.5-flash`
+
+Restart the backend after changing env vars.

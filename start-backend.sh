@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Load backend/.env if present (for local dev)
+if [ -f "backend/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "backend/.env"
+  set +a
+fi
+
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR/backend"
 

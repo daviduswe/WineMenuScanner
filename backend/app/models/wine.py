@@ -27,6 +27,9 @@ class Wine(BaseModel):
     vintage: Optional[int] = None
     grape: Optional[str] = None
 
+    # Optional enrichment
+    description: Optional[str] = None
+
     price: Price = Field(default_factory=Price)
 
 
