@@ -205,8 +205,7 @@ This MVP is intentionally simple (single FastAPI service + React UI). To scale i
 
 ### Architecture diagram
 
-mermaid
-
+```mermaid
 flowchart LR
   U[User] -->|"Upload menu image"| FE["Frontend (Vite + React)"]
   FE -->|"POST /api/v1/analyze (multipart)"| API[FastAPI Backend]
@@ -223,7 +222,7 @@ flowchart LR
 
   RESP --> FE
   FE --> LIST[Wine list / table]
-  LIST --> DETAIL[Wine detail view]
+  LIST --> DETAIL[Wine detail view]s
 
 ### Architecture overview
 
