@@ -205,25 +205,25 @@ This MVP is intentionally simple (single FastAPI service + React UI). To scale i
 
 ### Architecture diagram
 
-```mermaid
+mermaid
+
 flowchart LR
-  U[User] -->|Upload menu image| FE[Frontend (Vite + React)]
-  FE -->|POST /api/v1/analyze (multipart)| API[FastAPI Backend]
+  U[User] -->|"Upload menu image"| FE["Frontend (Vite + React)"]
+  FE -->|"POST /api/v1/analyze (multipart)"| API[FastAPI Backend]
 
-  API --> OCR[Surya OCR\n(text + bbox)]
-  OCR --> PARSE[Row grouping + Parsing\n(price association)]
-  PARSE --> NORM[Normalization\n(lightweight)]
+  API --> OCR["Surya OCR\n(text + bbox)"]
+  OCR --> PARSE["Row grouping + Parsing\n(price association)"]
+  PARSE --> NORM["Normalization\n(lightweight)"]
 
-  NORM -->|optional| LLM[Gemini enrichment\n(batch, best-effort)]
+  NORM -->|"optional"| LLM["Gemini enrichment\n(batch, best-effort)"]
   LLM <--> CACHE[(SQLite + in-memory cache)]
 
-  NORM --> RESP[AnalyzeResponse\nrawText + wines[]]
+  NORM --> RESP["AnalyzeResponse\nrawText + wines[]"]
   LLM --> RESP
 
   RESP --> FE
   FE --> LIST[Wine list / table]
   LIST --> DETAIL[Wine detail view]
-```
 
 ### Architecture overview
 
