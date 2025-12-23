@@ -1,6 +1,31 @@
 ## **Introduction**
 
-This project aims to develop a modern Wine Menu Scanner application that replaces a legacy system by transforming photos of restaurant wine menus into structured, interactive digital wine lists. The core functionality leverages advanced computer vision and natural language processing techniques to handle real-world challenges such as varied menu layouts, poor image quality (e.g., due to lighting or angles), stylized fonts, and multilingual content commonly found in wine menus (e.g., French, Italian, or Spanish terms).
+This project aims to develop a modern Wine Menu Scanner application by transforming photos of restaurant wine menus into structured, interactive digital wine lists. The core functionality leverages advanced computer vision and natural language processing techniques to handle real-world challenges such as varied menu layouts, poor image quality (e.g., due to lighting or angles), stylized fonts, and multilingual content commonly found in wine menus (e.g., French, Italian, or Spanish terms).
+
+### Example
+
+**Input menu (Example):**
+
+![Input menu example](frontend/example/Input_menu.png)
+
+**Result after analyzing:**
+
+After you upload the menu photo, the backend runs OCR and geometry-aware parsing to turn noisy menu text into structured wine rows. The UI then renders:
+
+
+- A **detail view** when you click a row, showing the full wine record.
+
+![Analyzed result example](frontend/example/Parsing.png)
+
+- A **clean wine list/table** with the best-effort extracted fields (name, producer/region/grape/vintage when present, price when detected).
+
+If LLM enrichment is enabled, missing fields (producer/region/grape/vintage/short description) may be filled in **best-effort** and cached; otherwise those fields remain blank.
+
+![Detailed information](frontend/example/Details.png)
+
+**Process (upload → OCR → parse → enrich → UI):**
+
+![Process demo](frontend/example/Process.gif)
 
 What the Wine Menu Scanner Will Do
 
@@ -120,7 +145,7 @@ At a High Level, the System Will:
    - ✅ Each row/card is clickable.
    - ✅ Search box (keyword search across name/producer/region).
    - ⬜ Filters (at minimum): Section, Region, Grape, Vintage range, Price range (when available).
-   - ✅ Sorting (at minimum): Name, Vintage, Price.
+   - ✅ Sorting (at minimum: Name, Vintage, Price.
 3. **Wine Detail Screen (Single Wine View)**
    - ⬜ Shows full extracted + enriched information.
    - ✅ Must include a visible **“Back to list”** button that returns to the same scroll position / filter state when feasible.
@@ -144,30 +169,123 @@ At a High Level, the System Will:
   - ⬜ optional enrichment fields
   - ⬜ optional confidence scores (simple 0–1 scale) if available
 
-## **Project Flowchart**
+## **High Level Design**
+
+### Scaling roadmap (production-ready + mobile-friendly)
+
+This MVP is intentionally simple (single FastAPI service + React UI). To scale it into a production system (including native smartphone apps), the evolution path is:
+
+- **Stateless API tier**
+  - Keep the backend stateless so it can scale horizontally behind a load balancer.
+  - Store any persistent data (jobs, results, user settings) in external stores.
+
+- **Async job processing for large uploads / peak traffic**
+  - Move OCR + parsing into background jobs (queue-based) to avoid long HTTP requests.
+  - Typical pattern: API returns a `jobId` immediately; clients poll or receive websocket/push updates.
+
+- **Dedicated OCR/ML inference service**
+  - Split OCR/inference into a separate service and keep the API service lightweight.
+  - Enables independent scaling (CPU pool for OCR, optional GPU pool for advanced models).
+
+- **Caching + content-addressed storage**
+  - Hash the uploaded image and cache OCR/parse outputs to avoid re-processing identical menus.
+  - Store uploads/results in object storage (e.g., S3-compatible) instead of local disk.
+
+- **Mobile (smartphone) support options**
+  - **On-device pre-processing**: crop/rotate/deskew and compress before upload to reduce latency and bandwidth.
+  - **On-device extraction (optional)**: run a lightweight on-device OCR/VLM for instant preview on iOS/Android/iPad, then sync structured JSON to the backend.
+  - **Hybrid**: on-device detects regions (sections/prices), backend performs full OCR + parsing for consistency.
+
+- **Observability + quality control**
+  - Add request tracing, OCR latency metrics, and parse success rates.
+  - Add a human review UI for edge cases (optional) and use collected corrections to tune heuristics/models.
+
+- **Security and multi-tenant readiness**
+  - Add auth (JWT/OAuth), rate limiting, upload quotas, and per-restaurant separation.
+
+### Architecture diagram
 
 ```mermaid
-flowchart TD
-    A[Open web app] --> B[Upload menu image]
-    B --> C[Backend receives image]
-    C --> D[Run OCR]
-    D --> E[Parse and normalize]
+flowchart LR
+  U[User] -->|Upload menu image| FE[Frontend (Vite + React)]
+  FE -->|POST /api/v1/analyze (multipart)| API[FastAPI Backend]
 
-    E --> L[Optional LLM enrichment]
-    L --> F[Return wines as JSON]
+  API --> OCR[Surya OCR\n(text + bbox)]
+  OCR --> PARSE[Row grouping + Parsing\n(price association)]
+  PARSE --> NORM[Normalization\n(lightweight)]
 
-    E --> F
+  NORM -->|optional| LLM[Gemini enrichment\n(batch, best-effort)]
+  LLM <--> CACHE[(SQLite + in-memory cache)]
 
-    F --> G[UI shows list]
-    G --> H[Click row]
-    H --> I[UI shows details]
-    I --> G
+  NORM --> RESP[AnalyzeResponse\nrawText + wines[]]
+  LLM --> RESP
 
-    D -->|OCR failed| X[Show error]
-    E -->|No wines found| Y[Show empty state]
+  RESP --> FE
+  FE --> LIST[Wine list / table]
+  LIST --> DETAIL[Wine detail view]
 ```
 
-The flow is intentionally minimal: show the list as soon as extraction completes; enrichment (if enabled) can update the list/detail afterward without blocking initial results.
+### Architecture overview
+
+The MVP is a simple **monorepo** with a FastAPI backend and a Vite/React frontend:
+
+- **Frontend (React + Vite)**
+  - Provides a single-page flow: **Upload → Results list → Wine detail**.
+  - Calls the backend `/api/v1/analyze` endpoint and renders the returned JSON.
+
+- **Backend (FastAPI)**
+  - Accepts an uploaded image, runs OCR, parses/normalizes into structured `Wine` objects, and returns JSON.
+  - Optionally enriches missing fields using Gemini in a single batched call (best-effort), with caching.
+
+### Data flow (end-to-end)
+
+1. **Upload**
+   - User uploads one menu image in the UI.
+   - Frontend sends a `multipart/form-data` request to `POST /api/v1/analyze`.
+
+2. **OCR**
+   - Backend runs **Surya OCR** to extract text + geometry.
+   - OCR output is cleaned to reduce noise (menus often contain separators, artifacts, etc.).
+
+3. **Geometry-aware grouping + parsing**
+   - OCR tokens are grouped into human-like rows using bounding-box overlap.
+   - The parser converts rows into wine candidates and associates prices with the correct wine lines.
+
+4. **Normalization**
+   - Lightweight cleanup (trim whitespace, normalize punctuation, normalize vintages when confidently detectable).
+
+5. **(Optional) LLM enrichment + caching**
+   - If `ENABLE_GEMINI_ENRICHMENT=true`, the backend sends a **single batched Gemini request** for missing fields.
+   - Results are cached (in-memory + SQLite) to avoid repeated LLM calls for the same wine names.
+   - Enrichment is best-effort; failures (quota/rate limits/invalid JSON) do not block the main flow.
+
+6. **Response**
+   - Backend returns an `AnalyzeResponse` containing:
+     - `rawText` (for debugging/troubleshooting)
+     - `wines[]` (structured, UI-ready wine objects)
+
+7. **UI rendering**
+   - The frontend renders a searchable/sortable list and a detail view per wine.
+
+### Key components
+
+#### Backend modules
+- `backend/app/api/v1/routes.py`: `/analyze` endpoint and request/response wiring.
+- `backend/app/services/ocr.py`: Surya OCR integration + text cleanup + bbox grouping.
+- `backend/app/services/parser.py`: converts OCR text into structured wine rows.
+- `backend/app/services/normalize.py`: lightweight normalization.
+- `backend/app/services/enrich_gemini.py`: optional Gemini batched enrichment + cache.
+- `backend/app/models/wine.py`: Pydantic models (`Wine`, `Price`, `AnalyzeResponse`).
+
+#### Frontend modules
+- `frontend/src/components/UploadCard.tsx`: upload UI + progress state.
+- `frontend/src/components/WineTable.tsx`: list view (search/sort + display).
+- `frontend/src/components/WineDetail.tsx`: detail view.
+- `frontend/src/api/client.ts`: backend API calls.
+
+### Operational notes
+- **Local dev**: `start-backend.sh` runs uvicorn. Reload is optional via `BACKEND_RELOAD=1`.
+- **No database for the core MVP**: only optional SQLite caching for Gemini enrichment.
 
 ## **File Structure**
 
