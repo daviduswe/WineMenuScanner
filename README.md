@@ -206,18 +206,27 @@ This MVP is intentionally simple (single FastAPI service + React UI). To scale i
 ## Architecture diagram
 
 ```mermaid
-flowchart LR
+%%{init: {
+%%  "flowchart": {
+%%    "nodeSpacing": 40,
+%%    "rankSpacing": 60
+%%  },
+%%  "themeVariables": {
+%%    "fontSize": "18px"
+%%  }
+%%}}%%
+flowchart TD
   U[User] -->|"Upload menu image"| FE["Frontend (Vite + React)"]
   FE -->|"POST /api/v1/analyze (multipart)"| API[FastAPI Backend]
 
   API --> OCR["Surya OCR\n(text + bbox)"]
   OCR --> PARSE["Row grouping + Parsing\n(price association)"]
-  PARSE --> NORM["Normalization\n(lightweight)"]
+  PARSE --> NORM["Normalization (lightweight)"]
 
-  NORM -->|"optional"| LLM["Gemini enrichment\n(batch, best-effort)"]
+  NORM -->|"optional"| LLM["Gemini enrichment (batch, best-effort)"]
   LLM <--> CACHE[(SQLite + in-memory cache)]
 
-  NORM --> RESP["AnalyzeResponse\nrawText + wines[]"]
+  NORM --> RESP["AnalyzeResponse rawText + wines[]"]
   LLM --> RESP
 
   RESP --> FE
