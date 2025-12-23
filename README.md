@@ -361,7 +361,7 @@ This stack is intentionally small and fast for the MVP.
 - **Pydantic**: request/response validation and typed wine models.
 - **Uvicorn**: fast ASGI server for local dev.
 - **Local OCR:**
-  - **PaddleOCR** (primary) for better accuracy on stylized fonts and real-world photos.
+  - **Surya OCR** (primary) for OCR + geometry (text + bounding boxes).
 - **Image processing:**
   - **Pillow (PIL)** for loading/resizing/rotation fixes.
   - (Optional) **OpenCV** only if needed for deskew/denoise; avoid by default to keep it lean.
