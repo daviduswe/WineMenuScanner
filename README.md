@@ -203,7 +203,7 @@ This MVP is intentionally simple (single FastAPI service + React UI). To scale i
 - **Security and multi-tenant readiness**
   - Add auth (JWT/OAuth), rate limiting, upload quotas, and per-restaurant separation.
 
-### Architecture diagram
+## Architecture diagram
 
 ```mermaid
 flowchart LR
@@ -222,7 +222,8 @@ flowchart LR
 
   RESP --> FE
   FE --> LIST[Wine list / table]
-  LIST --> DETAIL[Wine detail view]s
+  LIST --> DETAIL[Wine detail view]
+```
 
 ### Architecture overview
 
